@@ -1,0 +1,54 @@
+# Deploy only orbitist.com as the GitHub Pages site root.
+# Repo Settings → Pages → Source: "GitHub Actions" (not "Deploy from a branch").
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare site (orbitist.com as root)
+        run: |
+          mkdir -p deploy
+          cp -r orbitist.com/* deploy/
+          for dir in assets.squarespace.com definitions.sqspcdn.com fonts.googleapis.com fonts.gstatic.com images.squarespace-cdn.com static1.squarespace.com use.typekit.net www.googletagmanager.com; do
+            [ -d "$dir" ] && cp -r "$dir" deploy/
+          done
+          # Fix asset paths: ../ -> / so they work from site root (href, src, content, data-*, srcset)
+          for f in deploy/*.html; do
+            sed -i 's|"\.\./|"/|g' "$f"
+            sed -i "s|'\.\./|'/|g" "$f"
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy
+
+  deploy-to-pages:
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
